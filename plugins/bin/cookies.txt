@@ -1,0 +1,2 @@
+# Empty template only. Do not commit Instagram session cookies to GitHub.
+# For private use, set COOKIES_FILE to a secure file path provided by your host.
