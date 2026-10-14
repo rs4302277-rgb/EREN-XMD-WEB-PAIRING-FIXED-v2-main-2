@@ -1,434 +1,838 @@
-// plugins/welcome-goodbye.js
+// plugins/groupprotect.js — Complete Group Protection Suite
+// AntiLink, AntiBot, AntiSticker, AntiWord, AntiGhost, Full Warn System
+
 import { Module } from "../lib/plugins.js";
 import { db } from "../lib/client.js";
-import { WELCOME_TEXTS, GOODBYE_TEXTS, pickRandom } from "./bin/text.js";
-import axios from "axios";
-import { jidNormalizedUser } from "@whiskeysockets/baileys";
 
-const DEFAULT_GOODBYE = pickRandom(GOODBYE_TEXTS);
-const DEFAULT_WELCOME = `✧⋄⋆⋅⋆⋄✧⋄⋆⋅⋆⋄✧∘┈┈✩.°
-𝗛𝗘𝗬𝗬𝗬 &mention
-✧⋄⋆⋅⋆⋄✧⋄⋆⋄✧∘┈┈✩.°
-𝗪𝗘𝗟𝗖𝗢𝗠𝗘 𝗧𝗢 𝗢𝗨𝗥 𝗣𝗔𝗜𝗥𝗜𝗡𝗚 𝗪𝗢𝗥𝗟𝗗
-°.✩┈┈∘✧ꔫ✧ꔫ✧ꔫ✧ꔫ✧ꔫ✧ꔫ✧ꔫ∘┈┈✩.°
-&group
-•.¸¸☆彡★彡☆彡★¸¸.•
-𝗞𝗘𝗘𝗣 𝗥𝗘𝗦𝗣𝗘𝗖𝗧 𝗙𝗢𝗥 𝗘𝗩𝗘𝗥𝗬𝗢𝗡𝗘
-°.✩┈┈∘✧ꔫ✧ꔫ✧ꔫ✧ꔫ✧ꔫ∘┈┈✩.°
-𝗦𝗢𝗠𝗘 𝗥𝗨𝗟𝗘𝗦 𝗠𝗨𝗦𝗧 𝗕𝗘 𝗙𝗢𝗟𝗟𝗢𝗪
-°.✩┈┈∘✧ꔫ✧ꔫ✧ꔫ✧ꔫ∘┈┈✩.°
-𝟭.𝗡𝗢 𝗨𝗥𝗟 𝗢𝗥 𝗟𝗜𝗡𝗞
-𝟮.𝗡𝗢 𝗦𝗣𝟰𝗠𝗠𝗜𝗡𝗚
-𝟯.𝗡𝗢 𝟰𝗕𝗨𝗦𝗦𝗜𝗡𝗚
-𝟰.𝗡𝗢 𝗙𝗟𝗜𝗥𝗧𝗜𝗡𝗚
-•.¸¸☆彡★彡☆彡★¸¸.•
-𝗘𝗡𝗝𝗢𝗬 𝗔 𝗚𝗢𝗢𝗗 𝗗𝗔𝗬 𝗪𝗜𝗧𝗛
-(ↄ´⍤◡⍤\`)ↄ ⫘⫘⫘⫘⫘⫘💎
-𝗥𝗔𝗛𝗨𝗟 𝗫𝗠𝗗
-ﮩ٨ـﮩﮩ٨ـ♡ﮩ٨ـﮩﮩ٨ـ`;
-const WELCOME_VIDEO_URLS = [
-  "https://files.catbox.moe/0wgiyc.mp4","https://files.catbox.moe/ak0q4j.mp4","https://files.catbox.moe/8hwaoq.mp4",
-  "https://files.catbox.moe/s85ljg.mp4","https://files.catbox.moe/jdos44.mp4","https://files.catbox.moe/61lduh.mp4",
-  "https://files.catbox.moe/l5ibh6.mp4","https://files.catbox.moe/u2vfs7.mp4","https://files.catbox.moe/9a2qks.mp4",
-  "https://files.catbox.moe/31mhpm.mp4","https://files.catbox.moe/tpa4nh.mp4","https://files.catbox.moe/pantdn.mp4",
-  "https://files.catbox.moe/rt7zfy.mp4","https://files.catbox.moe/8dv7yg.mp4","https://files.catbox.moe/k3sp0v.mp4",
-  "https://files.catbox.moe/e35oz0.mp4","https://files.catbox.moe/d7n3jv.mp4","https://files.catbox.moe/mk5glb.mp4",
-  "https://files.catbox.moe/shuxrf.mp4","https://files.catbox.moe/hbp4pa.mp4","https://files.catbox.moe/snxu1w.mp4",
-  "https://files.catbox.moe/7n3zf9.mp4","https://files.catbox.moe/4p9vrq.mp4","https://files.catbox.moe/fvjlbj.mp4",
-  "https://files.catbox.moe/caqr7p.mp4","https://files.catbox.moe/tgyl27.mp4"
-];
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-/* ---------------- helpers ---------------- */
-function toBool(v) {
-  if (v === true || v === 1) return true;
-  if (v === false || v === 0) return false;
-  if (typeof v === "string")
-    return ["true", "1", "yes", "on"].includes(v.toLowerCase());
-  return Boolean(v);
+function getBotNum(conn) {
+  const raw = conn?.user?.id || conn?.user?.jid || "";
+  return String(raw).split("@")[0].split(":")[0].replace(/\D/g, "") || null;
 }
 
-function buildText(template = "", replacements = {}) {
-  let text = String(template || "");
-  const wantsPp = /&pp\b/i.test(text);
-  const tags = {
-    "&mention": replacements.mentionText || "",
-    "&name": replacements.name || "",
-    "&size": String(replacements.size ?? ""),
-    "&number": replacements.number || "",
-    "&user": replacements.number || "",
-    "&group": replacements.name || "",
-    "&count": String(replacements.size ?? ""),
-    "&bot": replacements.botName || "",
-    "&owner": replacements.ownerName || "",
-  };
-  for (const [tag, value] of Object.entries(tags)) text = text.replaceAll(tag, value);
-  text = text.replace(/&pp\b/gi, "").trim();
-  return { text, wantsPp };
+function gKey(feature, groupJid) {
+  return `${feature}:${groupJid}`;
 }
 
-function getGroupConfigKey(groupJid, kind) {
-  return `group:${groupJid}:${kind}`;
+function isOwner(message) {
+  return !!(message.isFromMe || message.isfromMe);
 }
 
-function renderTemplate(template, data) {
-  return buildText(template, data).text;
+function isAdminOrOwner(message) {
+  return (
+    isOwner(message) ||
+    !!(message.isAdmin || message.isGroupAdmin || message.isBotAdmin)
+  );
 }
 
-async function fetchProfileBuffer(conn, jid) {
-  try {
-    const getUrl =
-      typeof conn.profilePictureUrl === "function"
-        ? () => conn.profilePictureUrl(jid, "image").catch(() => null)
-        : () => Promise.resolve(null);
-    const url = await getUrl();
-    if (!url) return null;
-    const res = await axios.get(url, {
-      responseType: "arraybuffer",
-      timeout: 20000,
-    });
-    return Buffer.from(res.data);
-  } catch (e) {
-    console.error(
-      "[welcome-goodbye] fetchProfileBuffer error:",
-      e?.message || e
-    );
-    return null;
+async function checkAdmin(message) {
+  if (!message?.isGroup) {
+    await message.send("❌ _This protection command only works in groups_").catch(() => {});
+    return false;
   }
+  await message.loadGroupInfo?.();
+  if (!(isOwner(message) || message.isAdmin || message.isGroupAdmin)) {
+    await message.send("❌ _Only group admins can use this command_").catch(() => {});
+    return false;
+  }
+  if (!message.isBotAdmin) {
+    await message.send("❌ _Make the bot a group admin first so protection actions can actually run_").catch(() => {});
+    return false;
+  }
+  return true;
 }
 
-async function sendWelcomeMsg(
-  conn, groupJid, text, mentions = [], imgBuffer = null, videoUrl = null
-) {
+async function deleteMsg(message) {
   try {
-    if (videoUrl) {
-      await conn.sendMessage(groupJid, {
-        video: { url: videoUrl }, mimetype: "video/mp4", caption: text, mentions,
-      });
-    } else if (imgBuffer) {
-      await conn.sendMessage(groupJid, { image: imgBuffer, caption: text, mentions });
-    } else {
-      await conn.sendMessage(groupJid, { text, mentions });
-    }
-  } catch (err) {
-    console.error("[welcome-goodbye] sendWelcomeMsg primary error:", err?.message || err);
+    await message.conn.sendMessage(message.from, { delete: message.key });
+  } catch {
     try {
-      if (imgBuffer) await conn.sendMessage(groupJid, { image: imgBuffer, caption: text });
-      else await conn.sendMessage(groupJid, { text, mentions });
-    } catch (e) {
-      console.error("[welcome-goodbye] sendWelcomeMsg fallback error:", e?.message || e);
+      await message.send({ delete: message.key });
+    } catch {}
+  }
+}
+
+function getSender(message) {
+  return (
+    message.sender ||
+    message.key?.participant ||
+    message.quoted?.sender ||
+    message.key?.remoteJid ||
+    null
+  );
+}
+
+function dbGet(botNum, key, fallback) {
+  const val = db.get(botNum, key);
+  return val !== undefined && val !== null ? val : fallback;
+}
+
+async function applyAction(message, senderJid, reason, action, botNum) {
+  const senderNum = (senderJid || "").split("@")[0];
+  const warnKey = gKey(`warn:${senderJid}`, message.from);
+
+  await deleteMsg(message);
+
+  if (action === "delete") {
+    await message
+      .send(`⚠️ @${senderNum} — ${reason}`, { mentions: [senderJid] })
+      .catch(() => {});
+    return;
+  }
+
+  if (action === "warn") {
+    const prev = dbGet(botNum, warnKey, 0);
+    const warns = (Number(prev) || 0) + 1;
+    db.setHot(botNum, warnKey, warns);
+
+    if (warns >= 3) {
+      db.delHot(botNum, warnKey);
+      await message
+        .send(
+          `🚫 @${senderNum} — ${reason}\n*3/3 Warnings reached — Removing!*`,
+          { mentions: [senderJid] }
+        )
+        .catch(() => {});
+      await new Promise((r) => setTimeout(r, 500));
+      await kickUser(message.conn, message.from, senderJid);
+    } else {
+      await message
+        .send(`⚠️ *Warning ${warns}/3* — @${senderNum}: ${reason}`, {
+          mentions: [senderJid],
+        })
+        .catch(() => {});
     }
+    return;
   }
+
+  // kick (default)
+  await message
+    .send(`🚫 @${senderNum} — ${reason}. *Removing...*`, {
+      mentions: [senderJid],
+    })
+    .catch(() => {});
+  await new Promise((r) => setTimeout(r, 500));
+  await kickUser(message.conn, message.from, senderJid);
 }
 
-/* ---------------- COMMANDS (group-level on/off only) ---------------- */
-/*
-  Usage (must be sent inside the group):
-    .welcome on
-    .welcome off
-    .goodbye on
-    .goodbye off
-*/
-Module({
-  command: "welcome",
-  package: "group",
-  description:
-    "Turn per-group welcome ON or OFF (must be used inside the group).",
-})(async (message, match) => {
-  // require group context
-  const groupJid =
-    message.from ||
-    message.chat ||
-    message.key?.remoteJid ||
-    (message.isGroup ? message.isGroup : null);
-  if (!groupJid || !groupJid.includes("@g.us")) {
-    return await message.send?.(
-      "❌ Use this command inside the group to toggle welcome messages."
-    );
-  }
-
-  // only on/off supported. ignore custom message
-  const raw = (match || "").trim().toLowerCase();
-  if (!raw) {
-    // read current
-    const botNumber =
-      (message.conn?.user?.id && String(message.conn.user.id).split(":")[0]) ||
-      "bot";
-    const key = `group:${groupJid}:welcome`;
-    const cfg = await db.getAsync(botNumber, key, null);
-    const status = cfg && typeof cfg === "object" ? toBool(cfg.status) : false;
-    return await message.sendreply?.(
-      `Welcome is ${status ? "✅ ON" : "❌ OFF"} for this group.`
-    );
-  }
-
-  if (raw !== "on" && raw !== "off") {
-    return await message.send?.("❌ Invalid option. Use `on` or `off`.");
-  }
-
-  const botNumber =
-    (message.conn?.user?.id && String(message.conn.user.id).split(":")[0]) ||
-    "bot";
-  const key = `group:${groupJid}:welcome`;
-  const cfg = { status: raw === "on" };
-  await db.set(botNumber, key, cfg);
-  await message.react?.("✅");
-  return await message.send(
-    cfg.status
-      ? "✅ Welcome ENABLED for this group"
-      : "❌ Welcome DISABLED for this group"
-  );
-});
-
-Module({
-  command: "goodbye",
-  package: "group",
-  description:
-    "Turn per-group goodbye ON or OFF (must be used inside the group).",
-})(async (message, match) => {
-  const groupJid =
-    message.from ||
-    message.chat ||
-    message.key?.remoteJid ||
-    (message.isGroup ? message.isGroup : null);
-  if (!groupJid || !groupJid.includes("@g.us")) {
-    return await message.send?.(
-      "❌ Use this command inside the group to toggle goodbye messages."
-    );
-  }
-
-  const raw = (match || "").trim().toLowerCase();
-  if (!raw) {
-    const botNumber =
-      (message.conn?.user?.id && String(message.conn.user.id).split(":")[0]) ||
-      "bot";
-    const key = `group:${groupJid}:goodbye`;
-    const cfg = await db.getAsync(botNumber, key, null);
-    const status = cfg && typeof cfg === "object" ? toBool(cfg.status) : false;
-    return await message.sendreply?.(
-      `Goodbye is ${status ? "✅ ON" : "❌ OFF"} for this group.`
-    );
-  }
-
-  if (raw !== "on" && raw !== "off") {
-    return await message.send?.("❌ Invalid option. Use `on` or `off`.");
-  }
-
-  const botNumber =
-    (message.conn?.user?.id && String(message.conn.user.id).split(":")[0]) ||
-    "bot";
-  const key = `group:${groupJid}:goodbye`;
-  const cfg = { status: raw === "on" };
-  await db.set(botNumber, key, cfg);
-  await message.react?.("✅");
-  return await message.send(
-    cfg.status
-      ? "✅ Goodbye ENABLED for this group"
-      : "❌ Goodbye DISABLED for this group"
-  );
-});
-
-/* ---------------- CUSTOM WELCOME/GOODBYE ---------------- */
-Module({
-  command: "setwelcome",
-  package: "group",
-  description: "Set a custom welcome template"
-})(async (message, match) => {
-  if (!message.isGroup) return message.send("❌ Use this command inside a group.");
-  await message.loadGroupInfo?.();
-  if (!message.isAdmin && !message.isFromMe) return message.send("❌ Admin/owner only.");
-  const value = String(match || "").trim();
-  if (!value) return message.send("Usage: .setwelcome <message>\nTags: &mention &pp &name &size &number &user &group &count &bot &owner");
-  const botNumber = String(message.conn?.user?.id || "bot").split(":")[0].split("@")[0];
-  await db.set(botNumber, getGroupConfigKey(message.from, "welcome"), { status: true, custom: value });
-  return message.send("✅ Custom welcome saved and enabled.");
-});
-
-Module({
-  command: "setgoodbye",
-  package: "group",
-  description: "Set a custom goodbye template"
-})(async (message, match) => {
-  if (!message.isGroup) return message.send("❌ Use this command inside a group.");
-  await message.loadGroupInfo?.();
-  if (!message.isAdmin && !message.isFromMe) return message.send("❌ Admin/owner only.");
-  const value = String(match || "").trim();
-  if (!value) return message.send("Usage: .setgoodbye <message>\nTags: &mention &pp &name &size &number &user &group &count &bot &owner");
-  const botNumber = String(message.conn?.user?.id || "bot").split(":")[0].split("@")[0];
-  await db.set(botNumber, getGroupConfigKey(message.from, "goodbye"), { status: true, custom: value });
-  return message.send("✅ Custom goodbye saved and enabled.");
-});
-
-Module({
-  command: "resetwelcome",
-  package: "group",
-  description: "Reset custom welcome"
-})(async (message) => {
-  if (!message.isGroup) return message.send("❌ Use this command inside a group.");
-  const botNumber = String(message.conn?.user?.id || "bot").split(":")[0].split("@")[0];
-  await db.set(botNumber, getGroupConfigKey(message.from, "welcome"), { status: false, custom: "" });
-  return message.send("♻️ Welcome reset.");
-});
-
-Module({
-  command: "resetgoodbye",
-  package: "group",
-  description: "Reset custom goodbye"
-})(async (message) => {
-  if (!message.isGroup) return message.send("❌ Use this command inside a group.");
-  const botNumber = String(message.conn?.user?.id || "bot").split(":")[0].split("@")[0];
-  await db.set(botNumber, getGroupConfigKey(message.from, "goodbye"), { status: false, custom: "" });
-  return message.send("♻️ Goodbye reset.");
-});
-
-async function nextWelcomeVideo(botNumber, groupJid) {
-  const key = `group:${groupJid}:welcome:videoIndex`;
-  let index = Number(await db.getAsync(botNumber, key, 0));
-  if (!Number.isInteger(index) || index < 0) index = 0;
-  const url = WELCOME_VIDEO_URLS[index % WELCOME_VIDEO_URLS.length];
-  await db.setHot(botNumber, key, (index + 1) % WELCOME_VIDEO_URLS.length);
-  return url;
-}
-
-/* ---------------- EVENT: group-participants.update ---------------- */
-Module({ on: "group-participants.update" })(async (_msg, event, conn) => {
+async function kickUser(conn, groupJid, jid) {
   try {
-    if (
-      !event ||
-      !event.id ||
-      !event.action ||
-      !Array.isArray(event.participants)
-    )
-      return;
-    const groupJid = event.id;
-    const groupName =
-      event.groupName ||
-      (event.groupMetadata && event.groupMetadata.subject) ||
-      "";
-    const groupSize =
-      typeof event.groupSize === "number"
-        ? event.groupSize
-        : event.groupMetadata && Array.isArray(event.groupMetadata.participants)
-        ? event.groupMetadata.participants.length
-        : event.groupMetadata && event.groupMetadata.participants
-        ? event.groupMetadata.participants.length
-        : 0;
+    await conn.groupParticipantsUpdate(groupJid, [jid], "remove");
+  } catch {}
+}
 
-    // compute botNumber same as commands
-    const botNumber =
-      (conn?.user?.id && String(conn.user.id).split(":")[0]) || "bot";
-    const action = String(event.action).toLowerCase();
-    const botJidFull = jidNormalizedUser(conn?.user?.id);
+// ══════════════════════════════════════════════════════════════════════════════
+// ── ANTILINK ─────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
 
-    for (const p of event.participants) {
-      const participantJid = jidNormalizedUser(
-        typeof p === "string" ? p : p.id || p.jid || ""
+const LINK_REGEX =
+  /(https?:\/\/[^\s]+|www\.[^\s]+|chat\.whatsapp\.com\/[^\s]+|wa\.me\/[^\s]+)/i;
+
+Module({
+  command: "antilink",
+  package: "group",
+  description: "Block links in group. .antilink on/off/kick/warn/delete",
+})(async (message, match) => {
+  if (!(await checkAdmin(message))) return;
+  if (!message.isGroup) return message.send("❌ _Groups only_");
+
+  const botNum = getBotNum(message.conn);
+  if (!botNum) return message.send("❌ Bot number not found.");
+
+  const input = (match || "").trim().toLowerCase();
+  const enabledKey = `antilink:${message.from}:enabled`;
+  const modeKey = `antilink:${message.from}:mode`;
+
+  if (!input) {
+    const on = dbGet(botNum, enabledKey, false) === true;
+    const mode = dbGet(botNum, modeKey, "delete");
+    return message.send(
+      `🔗 *AntiLink*\n> Status: ${on ? "✅ ON" : "❌ OFF"}\n> Mode: ${String(
+        mode
+      ).toUpperCase()}\n\n` +
+        `Use:\n• .antilink on\n• .antilink off\n• .antilink kick\n• .antilink warn\n• .antilink delete`
+    );
+  }
+  if (input === "on") {
+    db.setHot(botNum, enabledKey, true);
+    if (!db.get(botNum, modeKey)) db.setHot(botNum, modeKey, "delete");
+    return message.send("✅ *AntiLink ON*");
+  }
+  if (input === "off") {
+    db.setHot(botNum, enabledKey, false);
+    return message.send("✅ *AntiLink OFF*");
+  }
+  if (["kick", "warn", "delete"].includes(input)) {
+    db.setHot(botNum, modeKey, input);
+    db.setHot(botNum, enabledKey, true);
+    return message.send(`✅ *AntiLink mode: ${input.toUpperCase()}*`);
+  }
+  return message.send("Usage: .antilink on/off/kick/warn/delete");
+});
+
+// AntiLink enforcement
+Module({
+  on: "text",
+  package: "group",
+  description: "AntiLink enforcement",
+})(async (message) => {
+  try {
+    if (!message?.isGroup) return;
+    await message.loadGroupInfo?.();
+    if (isOwner(message)) return;
+    if (message.isAdmin || message.isGroupAdmin) return;
+
+    const body = message.body || message.text || "";
+    if (!body) return;
+    if (!LINK_REGEX.test(body)) return;
+
+    const botNum = getBotNum(message.conn);
+    if (!botNum) return;
+
+    const enabledKey = `antilink:${message.from}:enabled`;
+    if (dbGet(botNum, enabledKey, false) !== true) return;
+    if (!message.isBotAdmin) return;
+
+    const mode = dbGet(botNum, `antilink:${message.from}:mode`, "delete");
+    const senderJid = getSender(message);
+    if (!senderJid) return;
+
+    await applyAction(
+      message,
+      senderJid,
+      "Links are not allowed here",
+      String(mode),
+      botNum
+    );
+  } catch {}
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── ANTIBOT ──────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+// AntiBot note:
+// WhatsApp does not expose a reliable "this participant is a bot" flag in the
+// group-participants.update event. A `:device@...` suffix is a linked device,
+// not a bot, so the old implementation could remove normal users incorrectly.
+// We therefore support an explicit bot JID/number deny-list and optional
+// verified-name heuristic when participant metadata is available.
+function normalizeJid(value) {
+  const s = String(value || "").trim();
+  if (!s) return "";
+  if (s.includes("@")) return s.replace(/:\d+(?=@)/, "");
+  const digits = s.replace(/\D/g, "");
+  return digits ? `${digits}@s.whatsapp.net` : "";
+}
+
+function getConfiguredBotJids(groupJid = "", botNum = "") {
+  const raw = process.env.ANTIBOT_NUMBERS || "";
+  const fromEnv = raw.split(",").map(normalizeJid).filter(Boolean);
+  const saved = groupJid && botNum ? dbGet(botNum, gKey("antibot:ids", groupJid), []) : [];
+  const fromDb = Array.isArray(saved) ? saved.map(normalizeJid).filter(Boolean) : [];
+  return new Set([...fromEnv, ...fromDb]);
+}
+
+function isBotParticipant(participant, configured) {
+  const jid = normalizeJid(
+    typeof participant === "string"
+      ? participant
+      : participant?.id || participant?.jid || participant?.participant
+  );
+  if (!jid) return false;
+
+  if (configured.has(jid)) return true;
+
+  const meta = typeof participant === "object" ? participant : {};
+  const label = `${meta.notify || ""} ${meta.verifiedName || ""} ${meta.name || ""}`.toLowerCase();
+  return /\b(bot|automated|automation)\b/.test(label);
+}
+
+Module({
+  command: "antibot",
+  package: "group",
+  description: "Protect group from configured/identified bot accounts",
+})(async (message, match) => {
+  if (!(await checkAdmin(message))) return;
+  if (!message.isGroup) return message.send("❌ _Groups only_");
+
+  const botNum = getBotNum(message.conn);
+  if (!botNum) return message.send("❌ Bot number not found.");
+
+  const input = (match || "").trim().toLowerCase();
+  const enabledKey = gKey("antibot:enabled", message.from);
+  const modeKey = gKey("antibot:mode", message.from);
+
+  if (!input) {
+    const on = dbGet(botNum, enabledKey, false) === true;
+    const mode = dbGet(botNum, modeKey, "kick");
+    const ids = [...getConfiguredBotJids(message.from, botNum)].map((jid) => `+${jid.split("@")[0]}`);
+    return message.send(
+      `╭━━〔 🤖 𝐀𝐍𝐓𝐈𝐁𝐎𝐓 〕━━╮\n` +
+      `┃ ✦ Status : ${on ? "🟢 ON" : "🔴 OFF"}\n` +
+      `┃ ✦ Mode   : ${String(mode).toUpperCase()}\n` +
+      `┃ ✦ IDs    : ${ids.length} configured\n` +
+      `╰━━━━━━━━━━━━━━━━━━╯\n\n` +
+      `• .antibot on/off/kick/warn/delete\n• .antibot add +91XXXXXXXXXX\n• .antibot remove +91XXXXXXXXXX\n• .antibot list`
+    );
+  }
+  const idAction = input.match(/^(add|remove|list)\b(?:\s+(.+))?$/i);
+  if (idAction) {
+    const listKey = gKey("antibot:ids", message.from);
+    const list = Array.isArray(dbGet(botNum, listKey, [])) ? dbGet(botNum, listKey, []) : [];
+    if (idAction[1].toLowerCase() === "list") {
+      const ids = [...getConfiguredBotJids(message.from, botNum)].map((jid) => `+${jid.split("@")[0]}`);
+      return message.send(ids.length ? `🤖 Configured bot IDs:\n${ids.join("\n")}` : "No bot IDs saved. Use .antibot add +countrycode-number.");
+    }
+    const rawId = String(idAction[2] || "").trim();
+    const digits = rawId.replace(/\D/g, "");
+    const jid = normalizeJid(rawId);
+    if (!/^\d{7,15}$/.test(digits) || !jid.endsWith("@s.whatsapp.net")) return message.send("Usage: .antibot add/remove +91XXXXXXXXXX");
+    const next = new Set(list.map(normalizeJid).filter(Boolean));
+    if (idAction[1].toLowerCase() === "add") next.add(jid); else next.delete(jid);
+    db.setHot(botNum, listKey, [...next]);
+    return message.send(`✅ AntiBot ID ${idAction[1].toLowerCase()}ed: +${jid.split("@")[0]}`);
+  }
+
+  if (input === "on") {
+    db.setHot(botNum, enabledKey, true);
+    if (!db.get(botNum, modeKey)) db.setHot(botNum, modeKey, "kick");
+    return message.send("╭━━〔 🤖 𝐀𝐍𝐓𝐈𝐁𝐎𝐓 〕━━╮\n┃ 🟢 Protection enabled\n╰━━━━━━━━━━━━━━━━━━╯");
+  }
+  if (input === "off") {
+    db.setHot(botNum, enabledKey, false);
+    return message.send("╭━━〔 🤖 𝐀𝐍𝐓𝐈𝐁𝐎𝐓 〕━━╮\n┃ 🔴 Protection disabled\n╰━━━━━━━━━━━━━━━━━━╯");
+  }
+  if (["kick", "warn", "delete"].includes(input)) {
+    db.setHot(botNum, modeKey, input);
+    db.setHot(botNum, enabledKey, true);
+    return message.send(`╭━━〔 🤖 𝐀𝐍𝐓𝐈𝐁𝐎𝐓 〕━━╮\n┃ 🟢 Mode: ${input.toUpperCase()}\n╰━━━━━━━━━━━━━━━━━━╯`);
+  }
+  return message.send("Usage: .antibot on/off/kick/warn/delete");
+});
+
+// AntiBot enforcement — group-participants.update
+Module({
+  on: "group-participants.update",
+  package: "group",
+  description: "AntiBot enforcement on join",
+})(async (_message, event, sock) => {
+  try {
+    const groupJid = event?.id || event?.groupJid;
+    const action = event?.action;
+    const parts = event?.participants || [];
+    const conn = sock;
+
+    if (action !== "add" || !groupJid || !conn?.user?.id) return;
+
+    const botNum = getBotNum(conn);
+    if (!botNum) return;
+
+    const enabledKey = gKey("antibot:enabled", groupJid);
+    if (dbGet(botNum, enabledKey, false) !== true) return;
+
+    // The bot must be an admin before it can remove anyone.
+    const mode = String(dbGet(botNum, gKey("antibot:mode", groupJid), "kick")).toLowerCase();
+    const configured = getConfiguredBotJids(groupJid, botNum);
+
+    for (const participant of parts) {
+      const jid = normalizeJid(
+        typeof participant === "string"
+          ? participant
+          : participant?.id || participant?.jid
       );
-      if (!participantJid) continue;
-      if (botJidFull && participantJid === botJidFull) continue; // skip bot itself
+      if (!jid || !isBotParticipant(participant, configured)) continue;
 
-      // WELCOME (add/invite/join)
-      if (action === "add" || action === "invite" || action === "joined") {
-        const key = `group:${groupJid}:welcome`;
-        const cfgRaw = await db.getAsync(botNumber, key, null);
-        const enabled =
-          cfgRaw && typeof cfgRaw === "object" ? toBool(cfgRaw.status) : false;
-        if (!enabled) continue;
+      const selfJid = normalizeJid(conn.user.id);
+      if (jid === selfJid) continue;
 
-        const mentionText = `@${participantJid.split("@")[0]}`;
-        const replacements = { mentionText, name: groupName, size: groupSize, number: participantJid.split("@")[0], botName: process.env.BOT_NAME || "RAHUL MD BOT", ownerName: process.env.OWNER_NAME || "OWNER" };
-        const template = cfgRaw?.custom || DEFAULT_WELCOME;
-        const base = buildText(template, replacements);
-        const text = base.text;
-        const wantsPp = base.wantsPp;
+      const num = jid.split("@")[0].split(":")[0];
 
-        let imgBuf = null;
-        let videoUrl = null;
-        if (wantsPp) {
-          imgBuf = await fetchProfileBuffer(conn, participantJid);
-        } else {
-          videoUrl = await nextWelcomeVideo(botNumber, groupJid);
-        }
-
+      if (mode === "kick") {
         try {
-          await sendWelcomeMsg(conn, groupJid, text, [participantJid], imgBuf, videoUrl);
-        } catch (e) {
-          console.error(
-            "[welcome-goodbye] error sending welcome:",
-            e?.message || e
-          );
+          await conn.groupParticipantsUpdate(groupJid, [jid], "remove");
+          await conn.sendMessage(groupJid, {
+            text: `╭━━〔 🤖 𝐀𝐍𝐓𝐈𝐁𝐎𝐓 〕━━╮\n┃ 🚫 @${num} detected\n┃ 🗑️ Removed from group\n╰━━━━━━━━━━━━━━━━━━╯`,
+            mentions: [jid],
+          });
+        } catch (err) {
+          await conn.sendMessage(groupJid, {
+            text: `⚠️ AntiBot detected @${num}, but I could not remove the account. Make sure I am a group admin.`,
+            mentions: [jid],
+          }).catch(() => {});
+          console.error("[AntiBot] remove failed:", err?.message || err);
         }
-      }
-
-      // GOODBYE (remove/leave/left/kicked)
-      if (
-        action === "remove" ||
-        action === "leave" ||
-        action === "left" ||
-        action === "kicked"
-      ) {
-        const key = `group:${groupJid}:goodbye`;
-        const cfgRaw = await db.getAsync(botNumber, key, null);
-        const enabled =
-          cfgRaw && typeof cfgRaw === "object" ? toBool(cfgRaw.status) : false;
-        if (!enabled) continue;
-
-        const mentionText = `@${participantJid.split("@")[0]}`;
-        const replacements = { mentionText, name: groupName, size: groupSize, number: participantJid.split("@")[0], botName: process.env.BOT_NAME || "RAHUL MD BOT", ownerName: process.env.OWNER_NAME || "OWNER" };
-        const template = cfgRaw?.custom || DEFAULT_GOODBYE;
-        const base = buildText(template, replacements);
-        const text = base.text;
-        const wantsPp = base.wantsPp;
-
-        let imgBuf = null;
-        let videoUrl = null;
-        if (wantsPp) {
-          imgBuf = await fetchProfileBuffer(conn, participantJid);
-        } else {
-          videoUrl = await nextWelcomeVideo(botNumber, groupJid);
-        }
-
-        try {
-          await sendWelcomeMsg(conn, groupJid, text, [participantJid], imgBuf, videoUrl);
-        } catch (e) {
-          console.error(
-            "[welcome-goodbye] error sending goodbye:",
-            e?.message || e
-          );
-        }
-      }
-
-      // PROMOTE / DEMOTE (kept as-is)
-      if (action === "promote" || action === "demote") {
-        const owner = botJidFull || null;
-        const ownerMention = owner
-          ? `@${owner.split("@")[0]}`
-          : conn.user?.id
-          ? `@${String(conn.user.id).split(":")[0]}`
-          : "Owner";
-        const actor = event.actor || event.author || event.by || null;
-        const actorText = actor ? `@${actor.split("@")[0]}` : "Admin";
-        const targetText = `@${participantJid.split("@")[0]}`;
-        const actionText = action === "promote" ? "promoted" : "demoted";
-        const sendText = `╭─〔 *🎉 Admin Event* 〕\n├─ ${actorText} has ${actionText} ${targetText}\n├─ Group: ${groupName}\n╰─➤`;
-        try {
-          const mentions = [actor, participantJid, botJidFull].filter(Boolean);
-          if (owner) mentions.push(owner);
-          await conn.sendMessage(groupJid, { text: sendText, mentions });
-        } catch (e) {
-          console.error(
-            "[welcome-goodbye] promote/demote send error:",
-            e?.message || e
-          );
-          try {
-            await conn.sendMessage(groupJid, { text: sendText });
-          } catch (_) {}
-        }
+      } else if (mode === "delete") {
+        await conn.sendMessage(groupJid, {
+          text: `⚠️ 🤖 Bot account detected: @${num}`,
+          mentions: [jid],
+        }).catch(() => {});
+      } else {
+        await conn.sendMessage(groupJid, {
+          text: `⚠️ 🤖 Bot account detected: @${num}. Please review.`,
+          mentions: [jid],
+        }).catch(() => {});
       }
     }
   } catch (err) {
-    console.error(
-      "[welcome-goodbye] event handler error:",
-      err?.message || err
+    console.error("[AntiBot] event error:", err?.message || err);
+  }
+});
+
+// Detect configured bot accounts when they post messages too (text or media).
+// WhatsApp does not expose a universal bot flag, so IDs must be configured or
+// the sender metadata must explicitly identify it as an automated account.
+Module({ on: "message", package: "group", description: "AntiBot message enforcement" })(async (message) => {
+  try {
+    if (!message?.isGroup || isOwner(message) || message.isAdmin || message.isGroupAdmin) return;
+    const botNum = getBotNum(message.conn);
+    if (!botNum || dbGet(botNum, gKey("antibot:enabled", message.from), false) !== true) return;
+    if (!message.isBotAdmin) return;
+    const jid = getSender(message);
+    if (!jid) return;
+    const configured = getConfiguredBotJids(message.from, botNum);
+    const senderJid = normalizeJid(jid);
+    const participant = (message.groupParticipants || []).find((p) => normalizeJid(p?.id || p?.jid || p) === senderJid);
+    const label = typeof participant === "object" ? `${participant?.notify || ""} ${participant?.verifiedName || ""} ${participant?.name || ""}`.toLowerCase() : "";
+    const detected = configured.has(senderJid) || /\b(bot|automated|automation)\b/.test(label);
+    if (!detected || senderJid === normalizeJid(message.conn?.user?.id)) return;
+    const mode = String(dbGet(botNum, gKey("antibot:mode", message.from), "kick")).toLowerCase();
+    await applyAction(message, jid, "Bot accounts are not allowed here", mode, botNum);
+  } catch (error) {
+    console.error("[AntiBot] message enforcement failed:", error?.message || error);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── ANTISTICKER ──────────────────────────────────════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+
+Module({
+  command: "antisticker",
+  package: "group",
+  description: "Block stickers in group. .antisticker on/off/kick/warn/delete",
+})(async (message, match) => {
+  if (!(await checkAdmin(message))) return;
+  if (!message.isGroup) return message.send("❌ _Groups only_");
+
+  const botNum = getBotNum(message.conn);
+  if (!botNum) return message.send("❌ Bot number not found.");
+
+  const input = (match || "").trim().toLowerCase();
+  const enabledKey = gKey("antisticker:enabled", message.from);
+  const modeKey = gKey("antisticker:mode", message.from);
+
+  if (!input) {
+    const on = dbGet(botNum, enabledKey, false) === true;
+    const mode = dbGet(botNum, modeKey, "delete");
+    return message.send(
+      `🎭 *AntiSticker*\n> Status: ${on ? "✅ ON" : "❌ OFF"}\n> Mode: ${String(
+        mode
+      ).toUpperCase()}\n\n` +
+        `Use:\n• .antisticker on\n• .antisticker off\n• .antisticker kick\n• .antisticker warn\n• .antisticker delete`
     );
   }
+  if (input === "on") {
+    db.setHot(botNum, enabledKey, true);
+    if (!db.get(botNum, modeKey)) db.setHot(botNum, modeKey, "delete");
+    return message.send("✅ *AntiSticker ON*");
+  }
+  if (input === "off") {
+    db.setHot(botNum, enabledKey, false);
+    return message.send("✅ *AntiSticker OFF*");
+  }
+  if (["kick", "warn", "delete"].includes(input)) {
+    db.setHot(botNum, modeKey, input);
+    db.setHot(botNum, enabledKey, true);
+    return message.send(`✅ *AntiSticker mode: ${input.toUpperCase()}*`);
+  }
+  return message.send("Usage: .antisticker on/off/kick/warn/delete");
+});
+
+// AntiSticker enforcement — must use "message" or "sticker" event, NOT "text"
+Module({
+  on: "message",
+  package: "group",
+  description: "AntiSticker enforcement",
+})(async (message) => {
+  try {
+    if (!message?.isGroup) return;
+    await message.loadGroupInfo?.();
+    if (isOwner(message)) return;
+    if (message.isAdmin || message.isGroupAdmin) return;
+
+    // Detect sticker by type
+    const mtype = message.type || message.mtype || "";
+    const isSticker =
+      mtype === "stickerMessage" ||
+      !!message.raw?.message?.stickerMessage ||
+      !!message.message?.stickerMessage;
+
+    if (!isSticker) return;
+
+    const botNum = getBotNum(message.conn);
+    if (!botNum) return;
+
+    const enabledKey = gKey("antisticker:enabled", message.from);
+    if (dbGet(botNum, enabledKey, false) !== true) return;
+    if (!message.isBotAdmin) return;
+
+    const mode = dbGet(
+      botNum,
+      gKey("antisticker:mode", message.from),
+      "delete"
+    );
+    const senderJid = getSender(message);
+    if (!senderJid) return;
+
+    await applyAction(
+      message,
+      senderJid,
+      "Stickers are not allowed here",
+      String(mode),
+      botNum
+    );
+  } catch {}
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── ANTIWORD ─────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+Module({
+  command: "antiword",
+  package: "group",
+  description:
+    "Block words in group. .antiword add/remove/list/on/off/kick/warn/delete",
+})(async (message, match) => {
+  if (!(await checkAdmin(message))) return;
+  if (!message.isGroup) return message.send("❌ _Groups only_");
+
+  const botNum = getBotNum(message.conn);
+  if (!botNum) return message.send("❌ Bot number not found.");
+
+  const input = (match || "").trim().toLowerCase();
+  const enabledKey = gKey("antiword:enabled", message.from);
+  const modeKey = gKey("antiword:mode", message.from);
+  const wordsKey = gKey("antiword:words", message.from);
+
+  if (!input) {
+    const on = dbGet(botNum, enabledKey, false) === true;
+    const mode = dbGet(botNum, modeKey, "delete");
+    const words = dbGet(botNum, wordsKey, []);
+    return message.send(
+      `🔤 *AntiWord*\n> Status: ${on ? "✅ ON" : "❌ OFF"}\n> Mode: ${String(
+        mode
+      ).toUpperCase()}\n` +
+        `> Words (${words.length}): ${
+          words.length ? words.join(", ") : "none"
+        }\n\n` +
+        `Use:\n• .antiword add <word>\n• .antiword remove <word>\n• .antiword list\n• .antiword on/off/kick/warn/delete`
+    );
+  }
+
+  if (input === "on") {
+    db.setHot(botNum, enabledKey, true);
+    return message.send("✅ *AntiWord ON*");
+  }
+  if (input === "off") {
+    db.setHot(botNum, enabledKey, false);
+    return message.send("✅ *AntiWord OFF*");
+  }
+  if (["kick", "warn", "delete"].includes(input)) {
+    db.setHot(botNum, modeKey, input);
+    db.setHot(botNum, enabledKey, true);
+    return message.send(`✅ *AntiWord mode: ${input.toUpperCase()}*`);
+  }
+  if (input === "list") {
+    const words = dbGet(botNum, wordsKey, []);
+    return message.send(
+      `📋 *Blocked Words (${words.length}):*\n` +
+        (words.length
+          ? words.map((w, i) => `${i + 1}. ${w}`).join("\n")
+          : "None")
+    );
+  }
+
+  const spaceIdx = input.indexOf(" ");
+  const sub = spaceIdx !== -1 ? input.slice(0, spaceIdx) : input;
+  const word =
+    spaceIdx !== -1
+      ? (match || "")
+          .trim()
+          .slice(spaceIdx + 1)
+          .trim()
+          .toLowerCase()
+      : "";
+
+  if (sub === "add") {
+    if (!word)
+      return message.send(
+        "❌ _Provide a word to block. Example: .antiword add badword_"
+      );
+    const words = dbGet(botNum, wordsKey, []);
+    if (words.includes(word))
+      return message.send(`ℹ️ _"${word}" already blocked_`);
+    words.push(word);
+    db.setHot(botNum, wordsKey, words);
+    db.setHot(botNum, enabledKey, true);
+    return message.send(`✅ Word blocked: \`${word}\``);
+  }
+  if (sub === "remove") {
+    if (!word)
+      return message.send(
+        "❌ _Provide a word to remove. Example: .antiword remove badword_"
+      );
+    let words = dbGet(botNum, wordsKey, []);
+    if (!words.includes(word))
+      return message.send(`ℹ️ _"${word}" not in list_`);
+    words = words.filter((w) => w !== word);
+    db.setHot(botNum, wordsKey, words);
+    return message.send(`✅ Word removed: \`${word}\``);
+  }
+
+  return message.send(
+    "Usage: .antiword add <word> | remove <word> | list | on/off/kick/warn/delete"
+  );
+});
+
+// AntiWord enforcement
+Module({
+  on: "text",
+  package: "group",
+  description: "AntiWord enforcement",
+})(async (message) => {
+  try {
+    if (!message?.isGroup) return;
+    await message.loadGroupInfo?.();
+    if (isOwner(message)) return;
+    if (message.isAdmin || message.isGroupAdmin) return;
+
+    const body = message.body || message.text || "";
+    if (!body) return;
+
+    const botNum = getBotNum(message.conn);
+    if (!botNum) return;
+
+    const enabledKey = gKey("antiword:enabled", message.from);
+    if (dbGet(botNum, enabledKey, false) !== true) return;
+    if (!message.isBotAdmin) return;
+
+    const words = dbGet(botNum, gKey("antiword:words", message.from), []);
+    if (!words.length) return;
+
+    const lbody = body.toLowerCase();
+    const matched = words.find((w) => lbody.includes(w.toLowerCase()));
+    if (!matched) return;
+
+    const mode = dbGet(botNum, gKey("antiword:mode", message.from), "delete");
+    const senderJid = getSender(message);
+    if (!senderJid) return;
+
+    await applyAction(
+      message,
+      senderJid,
+      `Blocked word: "${matched}"`,
+      String(mode),
+      botNum
+    );
+  } catch {}
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── WARN SYSTEM ──────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+Module({
+  command: "warn",
+  package: "group",
+  description: "Warn a user (3 warns = kick). .warn @user [reason]",
+})(async (message, match) => {
+  try {
+    if (!(await checkAdmin(message))) return;
+    if (!message.isGroup) return message.send("❌ _Groups only_");
+    if (!message.isBotAdmin)
+      return message.send("❌ _Bot must be admin to warn users_");
+
+    const senderJid =
+      message.mentions?.[0] ||
+      message.quoted?.sender ||
+      message.quoted?.participant ||
+      message.quoted?.key?.participant;
+
+    if (!senderJid) return message.send("❌ _Tag or reply to a user to warn_");
+    if (
+      isOwner({
+        key: { participant: senderJid },
+        isFromMe: senderJid === message.conn?.user?.id,
+      })
+    ) {
+      return message.send("❌ _Cannot warn the bot owner_");
+    }
+
+    const botNum = getBotNum(message.conn);
+    if (!botNum) return message.send("❌ Bot number not found.");
+
+    const reason =
+      (match || "").replace(/@\d+/g, "").trim() || "Rule violation";
+    const warnKey = gKey(`warn:${senderJid}`, message.from);
+    const prev = dbGet(botNum, warnKey, 0);
+    const warns = (Number(prev) || 0) + 1;
+    db.setHot(botNum, warnKey, warns);
+
+    const num = senderJid.split("@")[0];
+
+    if (warns >= 3) {
+      db.delHot(botNum, warnKey);
+      await message.send(
+        `🚫 @${num} — *3/3 Warnings reached!*\nReason: ${reason}\n\n_Removing from group..._`,
+        { mentions: [senderJid] }
+      );
+      await new Promise((r) => setTimeout(r, 600));
+      await kickUser(message.conn, message.from, senderJid);
+    } else {
+      await message.send(
+        `⚠️ *Warning ${warns}/3* for @${num}\n📝 Reason: ${reason}`,
+        { mentions: [senderJid] }
+      );
+    }
+    await message.react("✅");
+  } catch {
+    await message.react("❌");
+    await message.send("❌ _Failed to warn user_");
+  }
+});
+
+Module({
+  command: "warnreset",
+  package: "group",
+  aliases: ["resetwarn", "clearwarn"],
+  description: "Reset warns for a user. .warnreset @user",
+})(async (message) => {
+  if (!(await checkAdmin(message))) return;
+  if (!message.isGroup) return message.send("❌ _Groups only_");
+
+  const senderJid =
+    message.mentions?.[0] ||
+    message.quoted?.sender ||
+    message.quoted?.participant ||
+    message.quoted?.key?.participant;
+
+  if (!senderJid) return message.send("❌ _Tag or reply to a user_");
+
+  const botNum = getBotNum(message.conn);
+  if (!botNum) return message.send("❌ Bot number not found.");
+
+  db.delHot(botNum, gKey(`warn:${senderJid}`, message.from));
+  await message.react("✅");
+  return message.send(`✅ Warnings cleared for @${senderJid.split("@")[0]}`, {
+    mentions: [senderJid],
+  });
+});
+
+Module({
+  command: "warncount",
+  package: "group",
+  aliases: ["warns", "checkwarn"],
+  description: "Check warns for a user. .warncount @user",
+})(async (message) => {
+  if (!message.isGroup) return message.send("❌ _Groups only_");
+
+  const senderJid =
+    message.mentions?.[0] ||
+    message.quoted?.sender ||
+    message.quoted?.participant ||
+    message.quoted?.key?.participant;
+
+  if (!senderJid) return message.send("❌ _Tag or reply to a user_");
+
+  const botNum = getBotNum(message.conn);
+  if (!botNum) return message.send("❌ Bot number not found.");
+
+  const warns =
+    Number(dbGet(botNum, gKey(`warn:${senderJid}`, message.from), 0)) || 0;
+  return message.send(
+    `⚠️ *Warn Count for @${senderJid.split("@")[0]}:* ${warns}/3`,
+    { mentions: [senderJid] }
+  );
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── ANTIGHOST ────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+Module({
+  command: "antighost",
+  package: "group",
+  aliases: ["antifake"],
+  description: "Enable/disable antighost. .antighost on/off",
+})(async (message, match) => {
+  if (!(await checkAdmin(message))) return;
+  if (!message.isGroup) return message.send("❌ _Groups only_");
+
+  const botNum = getBotNum(message.conn);
+  if (!botNum) return message.send("❌ Bot number not found.");
+
+  const input = (match || "").trim().toLowerCase();
+  const key = gKey("antighost:enabled", message.from);
+
+  if (input === "on") {
+    db.setHot(botNum, key, true);
+    return message.send(
+      "✅ *AntiGhost ON*\n_Members who ghost will be warned_"
+    );
+  }
+  if (input === "off") {
+    db.setHot(botNum, key, false);
+    return message.send("✅ *AntiGhost OFF*");
+  }
+
+  const on = dbGet(botNum, key, false) === true;
+  return message.send(
+    `👻 *AntiGhost*\n> Status: ${
+      on ? "✅ ON" : "❌ OFF"
+    }\n\nUse: .antighost on/off`
+  );
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── PROTECTION STATUS ────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+Module({
+  command: "protection",
+  package: "group",
+  aliases: ["gpstatus", "groupprotect", "protect"],
+  description: "Show all group protection settings",
+})(async (message) => {
+  if (!message.isGroup) return message.send("❌ _Groups only_");
+
+  const botNum = getBotNum(message.conn);
+  if (!botNum) return message.send("❌ Bot number not found.");
+  const g = message.from;
+
+  const flag = (k) => (dbGet(botNum, k, false) === true ? "✅" : "❌");
+  const mode = (k) => dbGet(botNum, k, "—") || "—";
+
+  return message.send(
+    `🛡️ *Group Protection Status*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🔗 AntiLink:    ${flag(`antilink:${g}:enabled`)} │ Mode: ${mode(
+        `antilink:${g}:mode`
+      )}\n` +
+      `🤖 AntiBot:     ${flag(gKey("antibot:enabled", g))} │ Mode: ${mode(
+        gKey("antibot:mode", g)
+      )}\n` +
+      `🎭 AntiSticker: ${flag(gKey("antisticker:enabled", g))} │ Mode: ${mode(
+        gKey("antisticker:mode", g)
+      )}\n` +
+      `🔤 AntiWord:    ${flag(gKey("antiword:enabled", g))} │ Mode: ${mode(
+        gKey("antiword:mode", g)
+      )}\n` +
+      `👻 AntiGhost:   ${flag(gKey("antighost:enabled", g))}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `*Commands:*\n` +
+      `.antilink | .antibot | .antisticker | .antiword | .antighost | .warn | .protection`
+  );
 });
